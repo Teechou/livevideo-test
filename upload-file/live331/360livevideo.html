@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<title>three.js webgl - equirectangular video panorama</title>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+		<style>
+			body {
+				background-color: #000000;
+				margin: 0px;
+				overflow: hidden;
+			}
+
+			#info {
+				position: absolute;
+				top: 0px; width: 100%;
+				color: #ffffff;
+				padding: 5px;
+				font-family:Monospace;
+				font-size:13px;
+				font-weight: bold;
+				text-align:center;
+			}
+
+			a {
+				color: #ffffff;
+			}
+		</style>
+	</head>
+	<body>
+		<script src="https://cdn.jsdelivr.net/hls.js/latest/hls.min.js"></script>
+		<div id="container"></div>
+
+		<script src="js/three.js"></script>
+
+		<script>
+
+			var camera, scene, renderer,video,audio;
+			var container;
+			var texture_placeholder,
+			isUserInteracting = false,
+			onMouseDownMouseX = 0, onMouseDownMouseY = 0,
+			lon = 0, onMouseDownLon = 0,
+			lat = 0, onMouseDownLat = 0,
+			phi = 0, theta = 0,
+			distance = 300,
+			onPointerDownPointerX = 0,
+			onPointerDownPointerY = 0,
+			onPointerDownLon = 0,
+			onPointerDownLat = 0;
+			var browser=window.navigator.userAgent.toLowerCase();
+
+			init();
+			animate();
+
+			function init() {
+
+				var container, mesh;
+
+				container = document.getElementById( 'container' );
+
+				camera = new THREE.PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 1, 1100 );
+				camera.target = new THREE.Vector3( 0, 0, 0 );
+
+				scene = new THREE.Scene();
+
+				var geometry = new THREE.SphereBufferGeometry( 500, 60, 40 );
+				geometry.scale( - 1, 1, 1 );
+
+				video = document.createElement( 'video' );
+				video.width = 640;
+				video.height = 360;
+				video.loop = true;
+				video.muted = true;
+
+				//创建音频
+				audio=document.createElement('audio');
+				//audio.src='sound/music.mp3';
+				//audio.autoplay='true';
+				
+				//video.src = "source/1920x1080.mp4";http://pili-live-hls.sonicam.co/sonicam-live-test/test.m3u8
+				if(Hls.isSupported()) {
+					alert('不支持')
+				   var hls = new Hls();
+				   var hlsaudio=new Hls(); 
+				   // http://www.streambox.fr/playlists/test_001/stream.m3u8
+				   hls.loadSource('http://www.streambox.fr/playlists/test_001/stream.m3u8');
+				   hlsaudio.loadSource('http://www.streambox.fr/playlists/test_001/stream.m3u8');
+				   hls.attachMedia (video);
+				   hlsaudio.attachMedia(audio);
+				   hls.on(Hls.Events.MANIFEST_PARSED,function() {
+				     //video.play();
+				   });
+				   hlsaudio.on(Hls.Events.MANIFEST_PARSED,function() {
+				     //video.play();
+				   });
+				}else{
+					alert('支持')
+					video.src="http://www.streambox.fr/playlists/test_001/stream.m3u8";
+					audio.src='http://www.streambox.fr/playlists/test_001/stream.m3u8';
+				}
+
+				//video.src='source/1920x1080.mp4';
+				video.setAttribute( 'webkit-playsinline', 'webkit-playsinline' );
+				// video.setAttribute('controls', 'controls');
+				//video.play();
+				//audio.play();
+				
+
+
+				var texture = new THREE.VideoTexture( video );
+				texture.minFilter = THREE.LinearFilter;
+				texture.format = THREE.RGBFormat;
+
+				var material   = new THREE.MeshBasicMaterial( { map : texture } );
+
+				mesh = new THREE.Mesh( geometry, material );
+
+				scene.add( mesh );
+				//scene.add(audio);
+
+				renderer = new THREE.WebGLRenderer();
+				renderer.setPixelRatio( window.devicePixelRatio );
+				renderer.setSize( window.innerWidth, window.innerHeight );
+				container.appendChild( renderer.domElement );
+
+				if(browser.indexOf('mobile')>0){
+					// document.addEventListener( 'touchstart', onDocumentMouseDown, false );
+					// document.addEventListener( 'touchmove', onDocumentMouseMove, false );
+					// document.addEventListener( 'touchend', onDocumentMouseUp, false );
+
+					document.addEventListener( 'touchstart', onTouchstart, false );
+					document.addEventListener( 'touchmove', onTouchmove, false );
+					document.addEventListener( 'touchend', onTouchend, false );
+
+					//document.addEventListener( 'wheel', onDocumentMouseWheel, false );
+				}else{
+					document.addEventListener( 'mousedown', onDocumentMouseDown, false );
+					document.addEventListener( 'mousemove', onDocumentMouseMove, false );
+					document.addEventListener( 'mouseup', onDocumentMouseUp, false );
+					document.addEventListener( 'wheel', onDocumentMouseWheel, false );
+				}
+
+				
+
+				//
+
+				window.addEventListener( 'resize', onWindowResize, false );
+
+			}
+
+			function onWindowResize() {
+
+				camera.aspect = window.innerWidth / window.innerHeight;
+				camera.updateProjectionMatrix();
+
+				renderer.setSize( window.innerWidth, window.innerHeight );
+
+			}
+
+			function onDocumentMouseDown( event ) {
+
+				event.preventDefault();
+
+				isUserInteracting = true;
+
+				onPointerDownPointerX = event.clientX;
+				onPointerDownPointerY = event.clientY;
+
+				onPointerDownLon = lon;
+				onPointerDownLat = lat;
+
+			}
+
+			function onTouchstart(event){
+			    if (event.targetTouches.length == 1) {
+			　　　　 event.preventDefault();// 阻止浏览器默认事件，重要 
+					// alert('start');
+					 isUserInteracting = true;
+
+			         var touch = event.targetTouches[0];
+			         // 把元素放在手指所在的位置
+			         onPointerDownPointerX = touch.pageX-50 + 'px';
+			         onPointerDownPointerY = touch.pageY-50 + 'px';
+
+			         //alert(onPointerDownPointerX+','+onPointerDownLon+','+onPointerDownLat);
+
+			         onPointerDownLon = lon;
+					 onPointerDownLat = lat;
+		        }
+			}
+			
+
+			function onDocumentMouseMove( event ) {
+
+				if ( isUserInteracting === true ) {
+
+					lon = ( onPointerDownPointerX - event.clientX ) * 0.1 + onPointerDownLon;
+					lat = ( event.clientY - onPointerDownPointerY ) * 0.1 + onPointerDownLat;
+
+				}
+
+			}
+
+			function onTouchmove(event){
+				//if (event.targetTouches.length == 1) {
+					if ( isUserInteracting === true ) {
+						  
+						 var touch = event.targetTouches[0];
+				　　　　 lon=( parseFloat(onPointerDownPointerX) - touch.pageX ) * 0.1 +onPointerDownLon;
+						 lat=( touch.pageY - parseFloat(onPointerDownPointerY) ) * 0.1 + onPointerDownLat;
+						// alert(touch.pageX+','+touch.pageY+','+lon+','+lat+','+onPointerDownPointerX+','+onPointerDownLon);
+
+			     	}
+		        //}
+			}
+
+			function onDocumentMouseUp( event ) {
+
+				isUserInteracting = false;
+
+			}
+
+			function onTouchend(event){
+
+				isUserInteracting = false;
+
+			}
+
+			function onDocumentMouseWheel( event ) {
+				
+				//distance += event.deltaY * 0.05;
+				distance += event.deltaY * 0.05;
+				console.log(event.deltaY);
+				// if(distance>=500){
+				// 	distance=500;
+				// }
+				// if(distance<=-500){
+				// 	distance=-500;
+				// }
+				// if(distance<550&&distance>-550){
+					
+				// }
+				console.log(distance);
+
+			}
+
+			function animate() {
+
+				requestAnimationFrame( animate );
+				update();
+
+			}
+
+			function update() {
+
+				lat = Math.max( - 85, Math.min( 85, lat ) );
+				phi = THREE.Math.degToRad( 90 - lat );
+				theta = THREE.Math.degToRad( lon );
+
+				camera.position.x = distance * Math.sin( phi ) * Math.cos( theta );
+				camera.position.y = distance * Math.cos( phi );
+				camera.position.z = distance * Math.sin( phi ) * Math.sin( theta );
+
+				camera.lookAt( camera.target );
+
+				/*
+				// distortion
+				camera.position.copy( camera.target ).negate();
+				*/
+
+				renderer.render( scene, camera );
+
+			}
+			//创建播放暂停按钮
+			var oBtn=document.createElement('button');
+			oBtn.innerHTML='播放/暂停';
+			oBtn.style.cssText='position:absolute;left:10px;top:10px;z-index:999;';
+			document.body.appendChild(oBtn);
+			//检测是移动端的情况
+			
+			if(browser.indexOf('mobile')>0){
+				oBtn.addEventListener('touchstart',function(event){
+					//阻止冒泡到document的touchstart事件上
+					event.stopPropagation();
+					if(video.paused){
+						//alert('2')
+						video.play();
+						audio.play();
+					}else{
+						video.pause();
+						audio.pause();
+					}
+				})
+				// oBtn.onclick=function(event){ 
+					
+				// }
+			}else{
+				oBtn.onclick=function(){
+					if(video.paused){
+						video.play();
+						audio.play();
+					}else{
+						video.pause();
+						audio.pause();
+					}
+				}
+			}
+			
+			//全屏按钮
+			var fullscreenBtn=document.createElement('button');
+			fullscreenBtn.innerHTML='全屏';
+			fullscreenBtn.style.cssText='position:absolute;left:10px;top:50px;';
+
+			var exitFullscreenBtn=document.createElement('button');
+			exitFullscreenBtn.innerHTML='退出全屏';
+			exitFullscreenBtn.style.cssText='position:absolute;left:10px;top:80px;';
+
+			document.body.appendChild(fullscreenBtn);
+			document.body.appendChild(exitFullscreenBtn);
+
+			//进入全屏按钮
+			if (fullscreenBtn) {
+			    fullscreenBtn.addEventListener("click", function () {
+			        var docElm = document.documentElement;
+			        if (docElm.requestFullscreen) {
+			            docElm.requestFullscreen();
+			        }
+			        else if (docElm.msRequestFullscreen) {
+			            docElm.msRequestFullscreen();
+			        }
+			        else if (docElm.mozRequestFullScreen) {
+			            docElm.mozRequestFullScreen();
+			        }
+			        else if (docElm.webkitRequestFullScreen) {
+			            docElm.webkitRequestFullScreen();
+			        }
+			    }, false);
+			}
+
+			//退出全屏  只能document对象调用
+			if (exitFullscreenBtn) {
+			    exitFullscreenBtn.addEventListener("click", function () {
+			        if (document.exitFullscreen) {
+			            document.exitFullscreen();
+			        }
+			        else if (document.msExitFullscreen) {
+			            document.msExitFullscreen();
+			        }
+			        else if (document.mozCancelFullScreen) {
+			            document.mozCancelFullScreen();
+			        }
+			        else if (document.webkitCancelFullScreen) {
+			            document.webkitCancelFullScreen();
+			        }
+			    }, false);
+			}
+
+		
+		</script>
+	</body>
+</html>
